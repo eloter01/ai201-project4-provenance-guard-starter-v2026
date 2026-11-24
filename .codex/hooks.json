@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/stop_checks.py\"",
+            "commandWindows": "py -3 \"$(git rev-parse --show-toplevel)/.codex/hooks/stop_checks.py\"",
+            "statusMessage": "Running ruff and pytest",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

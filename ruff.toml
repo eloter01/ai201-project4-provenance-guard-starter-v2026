@@ -1,0 +1,26 @@
+# Ruff settings that match the Python conventions in AGENTS.md.
+line-length = 79
+
+[lint]
+select = [
+    "E", "W",  # pycodestyle, including E501 line length
+    "F",       # pyflakes
+    "I",       # import sorting
+    "N",       # PEP 8 naming
+    "UP",      # modern syntax, such as f-strings
+    "B",       # likely bugs
+    "BLE",     # blind `except Exception:`
+    "ANN",     # missing type hints on signatures
+    "D",       # docstrings
+    "PTH",     # pathlib over os.path
+]
+# Module and package docstrings aren't part of the house style.
+ignore = ["D100", "D104"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+# Test names already say what they check, so docstrings and hints there
+# add noise.
+"tests/**" = ["D", "ANN"]
