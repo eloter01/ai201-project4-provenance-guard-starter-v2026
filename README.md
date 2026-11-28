@@ -201,25 +201,102 @@ harder to flag.
 
 ## Sample Run
 
-<!-- One submission and one appeal, pasted as text: the request, the response,
-     and the log entries. -->
+The service used cached GPT-2 weights with `HF_HUB_OFFLINE=1`.
 
-**A submission**
+**Smoke test**
 
-<!-- The response needs content_id, guess, confidence, label, AND both
-     signal scores - model_score and style_score. Unit 8's tools read those
-     two off the response, so leaving them out costs you next unit's
-     diagnostics. -->
-
-```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
-  -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+```powershell
+'{"message":"hello"}' | curl.exe --silent --show-error --max-time 60 --write-out '\n%{http_code}\n' -H 'Content-Type: application/json' --data-binary '@-' http://127.0.0.1:5000/ping
 ```
+
+HTTP `200`
 
 ```json
-
+{
+  "ok": true,
+  "service": "provenance-guard",
+  "you_sent": "hello"
+}
 ```
+
+**Valid submission (458 characters)**
+
+```powershell
+$text = @(
+  'I went to the community garden before breakfast to water the tomatoes.'
+  'A loose board had fallen across the path, and the hose was kinked beneath it.'
+  'I moved the board, carried the hose back to the tap, and checked the soil before watering.'
+  'The plants near the fence were still damp, so I left them alone.'
+  'By the time I finished, the volunteer who looks after the herbs had arrived.'
+  'We agreed to hang the hose beside the shed so the next person could find it.'
+) -join ' '
+$payload = @{text = $text; creator_id = 'milestone-3-demo'} | ConvertTo-Json -Compress
+$payload | curl.exe --silent --show-error --max-time 60 --write-out '\n%{http_code}\n' -H 'Content-Type: application/json' --data-binary '@-' http://127.0.0.1:5000/submit
+```
+
+HTTP `200`
+
+```json
+{
+  "confidence": 0.5,
+  "content_id": "bdad0e64-bdb5-41d3-9ad5-2076097e97e2",
+  "guess": "unsure",
+  "label": "We are unsure who wrote this text.",
+  "model_score": 0.5868,
+  "style_score": null
+}
+```
+
+**Submission missing `text`**
+
+```powershell
+'{"creator_id":"milestone-3-demo"}' | curl.exe --silent --show-error --max-time 60 --write-out '\n%{http_code}\n' -H 'Content-Type: application/json' --data-binary '@-' http://127.0.0.1:5000/submit
+```
+
+HTTP `400`
+
+```json
+{
+  "error": "invalid_field",
+  "message": "'text' must be a nonblank string."
+}
+```
+
+**Audit log**
+
+```powershell
+curl.exe --silent --show-error --max-time 60 --write-out '\n%{http_code}\n' 'http://127.0.0.1:5000/log?limit=2'
+```
+
+HTTP `200`
+
+```json
+{
+  "count": 2,
+  "entries": [
+    {
+      "combined_score": 0.5,
+      "content_id": "bdad0e64-bdb5-41d3-9ad5-2076097e97e2",
+      "creator_id": "milestone-3-demo",
+      "guess": "unsure",
+      "label": "We are unsure who wrote this text.",
+      "model_score": 0.5868,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-11-28T18:09:27+00:00"
+    },
+    {
+      "creator_id": "milestone-3-demo",
+      "event": "rejected",
+      "reason": "invalid_field",
+      "status": "rejected",
+      "timestamp": "2026-11-28T18:09:27+00:00"
+    }
+  ]
+}
+```
+
+<!-- Add the appeal request, response, and audit entry in Milestone 5. -->
 
 **An appeal**
 
@@ -227,16 +304,6 @@ $ curl -X POST http://127.0.0.1:5000/submit \
 $ curl -X POST http://127.0.0.1:5000/appeal \
   -H "Content-Type: application/json" \
   -d '{"content_id": "...", "reasoning": "..."}'
-```
-
-```json
-
-```
-
-**What the log shows afterwards**
-
-```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
 ```
 
 ```json
