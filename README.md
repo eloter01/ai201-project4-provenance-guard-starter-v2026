@@ -633,11 +633,11 @@ whose work got caught by it:
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. At most 1 `ai` guess per 10 self-authored passages in each trial |  |  |  |  |  |
+| 2. Median AI `confidence` at least 0.20 above median human `confidence` in each trial |  |  |  |  |  |
+| 3. All 3 guess-and-label pairs appear in each trial |  |  |  |  |  |
+| 4. All 3 trials confirm appeals with `200`, log `under_review`, and return `404` for unknown IDs |  |  |  |  |  |
+| 5. All 3 trials return `400` for invalid text and `200` for valid text over 400 characters |  |  |  |  |  |
 
 **Real output from one trial**, pasted as text, naming the file and function
 that produced it:
