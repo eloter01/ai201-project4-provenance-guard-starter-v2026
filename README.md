@@ -560,17 +560,22 @@ All six new rows are in [logs/audit.jsonl](logs/audit.jsonl).
 
 ## How I Used AI
 
-**Moment 1**
+**Moment 1 — Choosing a submission length limit**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+I asked what a 400-character limit would do to the style signal. The
+assistant explained that short passages can provide too few sentences to
+measure length variation and too few words for a stable vocabulary score.
+I dropped the API character cap, kept the detector's 400-token window, and
+added a test for a valid submission over 400 characters.
 
-**Moment 2**
+**Moment 2 — Handling disagreement between signals**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+I asked for a plan to combine the model and style scores. The assistant
+suggested averaging them with equal weights and requiring both to reach the
+AI cutoff before returning a high-confidence AI result. I chose that rule
+for `scoring.py::combine_signals`. When the average reaches the cutoff and
+one signal falls below it, the function returns the midpoint of the unsure
+range.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
