@@ -149,6 +149,66 @@ falls below 0.65. The rule returns 0.50 for that pair. A model score of
 0.90 and a style score of 0.50 also average to 0.70 and produce 0.50
 under the rule. When both scores are exactly 0.65, the rule keeps 0.65.
 
+### Service calibration
+
+Seven passages were submitted to the running service with the local `gpt2`
+model. Each response matched one `decided` entry in `GET /log` by
+`content_id`. Both signal scores matched exactly, and each response's
+`confidence` matched the audit row's `combined_score` and the independently
+recomputed result. This table rounds scores to four decimal places.
+
+| Passage | Model | Style | Confidence | Audit content ID |
+| --- | ---: | ---: | ---: | --- |
+| Clearly AI, generated feedback paragraph | 0.9143 | 1.0000 | 0.9572 | `981e2e53-670b-46bb-9a06-d4bb208748d0` |
+| Clearly human, long *Moby-Dick* excerpt | 0.2758 | 0.1695 | 0.2226 | `05987484-8909-488d-ad9c-2e8f9919c7ba` |
+| Formal human, *Federalist No. 10* | 0.8352 | 0.8929 | 0.8641 | `458f9eca-2e4e-4348-911a-d5bee9294ba3` |
+| Plain human, Pepys's diary | 0.8406 | 1.0000 | 0.9203 | `481dd324-5e2d-4b7c-9056-f03a245b40dd` |
+| Lightly edited AI, feedback paragraph | 0.8172 | 0.9474 | 0.8823 | `2d267b73-8115-4ec6-a0f5-65724937dd6b` |
+| Short human, first sentence of *Moby-Dick* | 0.2744 | 0.5000 | 0.3872 | `33ac170c-01cb-4f20-9dd6-7813a50cb3d9` |
+| Borderline, shop note | 0.6449 | 0.7953 | 0.5000 | `bef880da-48ff-49cd-a141-b4521d0c3984` |
+
+The test used the generated feedback paragraph above and the shop note
+below. The long human passage is the first six paragraphs of Chapter 1,
+from "Call me Ishmael." through "What do they here?" with paragraph breaks
+replaced by single spaces. The short version is the first sentence.
+[Project Gutenberg Australia]
+
+The formal sample is James Madison's two paragraphs beginning "There are
+two methods of curing the mischiefs of faction" and ending "the same
+interests." The paragraphs were joined with a single space.
+[Library of Congress transcript][federalist-calibration-source]
+
+The plain sample is Samuel Pepys's June 25, 1668 diary entry, starting
+"Up, and to the office all the morning" and ending "to supper and to bed."
+[Project Gutenberg transcript][pepys-calibration-source]
+
+The edited AI sample joins two sentences and replaces some repeated
+phrases in the generated feedback paragraph.
+
+> The system collects user feedback to improve the quality of the service.
+> It reviews those comments to identify common problems with the service and
+> uses the feedback to guide future improvements. The team tracks user
+> feedback to measure the impact of each change.
+
+- The generated paragraph scored 0.7345 higher than the long human
+  excerpt on the combined score.
+- The formal and plain human samples both crossed the AI cutoff on both
+  signals. Their model scores clustered near 0.84, and their vocabulary
+  ratios of 0.7907 and 0.7633 both fell below the 0.80 scaling floor. The
+  agreement rule would allow a false positive on both passages once
+  the score determines the label.
+- Editing the generated paragraph lowered the model score by 0.0971 and
+  the style score by 0.0526. Both still cleared the cutoff.
+- The short excerpt had six model tokens and neither style measure
+  qualified, so style returned 0.5000. The long passage had 491 model
+  tokens. The detector used the first 400, and stylometry used all 387
+  words. Style dropped to 0.1695 while the model score stayed near 0.275.
+- The shop note's average reached 0.7201 with only style above the
+  cutoff. Its combined score was 0.5000.
+
+[federalist-calibration-source]: https://guides.loc.gov/federalist-papers/text-1-10
+[pepys-calibration-source]: https://www.gutenberg.org/ebooks/4190.html.images
+
 ### A false positive and appeal
 
 In this example, a writer sends `POST /submit` with `creator_id` set to
