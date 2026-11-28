@@ -25,7 +25,8 @@ from datetime import datetime, timezone
 
 import config
 
-_lock = threading.Lock()
+# Appeals hold the lock through lookup and call the shared, locked writer.
+_lock = threading.RLock()
 
 
 def _now() -> str:
@@ -73,23 +74,49 @@ def log_decision(
     return _append(entry)
 
 
-def log_appeal(content_id: str, creator_id: str, reasoning: str) -> dict:
-    """
-    Record an appeal beside the original decision.
+def log_appeal(
+    content_id: str, creator_id: str, reasoning: str
+) -> dict[str, object]:
+    """Record an appeal beside the original decision or return an exact match.
 
-    This doesn't overwrite anything. The log is append-only, so the original
-    decision stays exactly where it was and the appeal sits after it — which is
-    the whole point of an audit log. Someone reading it later can see what was
-    decided, that it was challenged, and in what order.
+    Args:
+        content_id: ID of the submission being appealed.
+        creator_id: Creator ID from the original decision.
+        reasoning: The writer's explanation for requesting review.
+
+    Returns:
+        The first appeal entry with matching content ID and reasoning.
+
+    Raises:
+        TypeError: An argument is not a string.
+        ValueError: An argument is empty or contains only whitespace.
     """
-    return _append({
-        "timestamp": _now(),
-        "content_id": content_id,
-        "creator_id": creator_id,
-        "event": "appeal",
-        "status": "under_review",
-        "reasoning": reasoning,
-    })
+    for name, value in (
+        ("content_id", content_id),
+        ("creator_id", creator_id),
+        ("reasoning", reasoning),
+    ):
+        if not isinstance(value, str):
+            raise TypeError(f"{name} must be a string.")
+        if not value.strip():
+            raise ValueError(f"{name} must be nonblank.")
+
+    with _lock:
+        for entry in entries_for(content_id):
+            if entry.get("event") == "appeal" and (
+                entry.get("reasoning") == reasoning
+            ):
+                return entry
+        return _append(
+            {
+                "timestamp": _now(),
+                "content_id": content_id,
+                "creator_id": creator_id,
+                "event": "appeal",
+                "status": "under_review",
+                "reasoning": reasoning,
+            }
+        )
 
 
 def log_rejection(creator_id: str, reason: str, **extra) -> dict:
@@ -132,7 +159,8 @@ def read_entries(limit: int | None = None) -> list[dict]:
         return []
 
     entries = []
-    for line in config.AUDIT_LOG.read_text(encoding="utf-8").splitlines():
+    # Literal Unicode line separators can appear inside JSON string values.
+    for line in config.AUDIT_LOG.read_text(encoding="utf-8").split("\n"):
         line = line.strip()
         if not line:
             continue
