@@ -93,27 +93,38 @@ well as when it leans strongly toward human or AI authorship.
 
 ---
 
-## 4.
+## 4. Confirm appeals and preserve the audit trail
 
-<!-- Your criterion. -->
+In each of three trials, create a fresh decision with `POST /submit`. Send
+its returned `content_id` and a nonblank `reasoning` to `POST /appeal`. The
+appeal must return HTTP `200`, the same `content_id`, and `status` set to
+`under_review`.
 
+In the `GET /log` entries, the original `decided` record must appear before
+a record with `event` set to `appeal` and `status` set to `under_review`.
+Both records must match the submission's `content_id` and `creator_id`.
+The appeal record must contain the reasoning sent by the writer. A
+well-formed appeal for a `content_id` with no decision must return HTTP `404`.
+Every check must pass in all three trials.
 
-
-**Why this target:**
-
-
+**Why this target?** The confirmation tells the writer their appeal is
+under review. The two audit entries let a reviewer reconstruct the decision
+and see why the writer challenged it.
 
 ---
 
-## 5.
+## 5. Reject invalid text and accept longer passages
 
-<!-- Your criterion. -->
+In each of three trials, send separate JSON objects to `POST /submit` with
+a valid `creator_id`. The service must return HTTP `400` when `text` is
+omitted, `null`, a non-string value, an empty string, or a whitespace-only
+string. For non-string values, try a number, a boolean, an array, and an
+object. In the same trial, submit a valid passage longer than 400 characters
+and require HTTP `200`. Every check must pass in all three trials.
 
-
-
-**Why this target:**
-
-
+**Why this target?** Rejecting invalid values gives callers a clear signal
+to fix their request. A writer should be able to submit an ordinary passage
+longer than 400 characters.
 
 ---
 
