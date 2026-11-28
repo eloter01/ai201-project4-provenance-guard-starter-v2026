@@ -66,9 +66,9 @@ WEIGHT_STYLE_SIGNAL = 0.5
 # Where one label becomes another. Scores run 0.0 (confidently human) to 1.0
 # (confidently AI).
 #
-#   score < HUMAN_THRESHOLD          -> high-confidence human
-#   between the two                  -> unsure
-#   score >= AI_THRESHOLD            -> high-confidence AI
+#   0 <= score <= HUMAN_THRESHOLD          -> high-confidence human
+#   HUMAN_THRESHOLD < score < AI_THRESHOLD -> unsure
+#   AI_THRESHOLD <= score <= 1             -> high-confidence AI
 #
 # ⚠️ This is where your false-positive decision from Milestone 1 actually gets
 # made. Widening the unsure band means fewer wrong accusations and more AI text
