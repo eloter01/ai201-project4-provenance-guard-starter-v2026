@@ -152,24 +152,26 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 
-def _reject_submission(
+def _reject_request(
     reason: str,
     message: str,
     *,
     creator_id: str = "unknown",
     status_code: int = 400,
+    operation: str = "submission",
+    **extra: str,
 ) -> tuple[Response, int]:
     try:
-        audit.log_rejection(creator_id=creator_id, reason=reason)
+        audit.log_rejection(creator_id=creator_id, reason=reason, **extra)
     except (OSError, UnicodeEncodeError):
-        return _audit_unavailable()
+        return _audit_unavailable(operation)
     return jsonify(error=reason, message=message), status_code
 
 
-def _audit_unavailable() -> tuple[Response, int]:
-    app.logger.exception("Could not write a submission audit entry.")
+def _audit_unavailable(operation: str = "submission") -> tuple[Response, int]:
+    app.logger.exception("Could not audit the %s.", operation)
     return jsonify(
-        error="audit_unavailable", message="Could not record the submission."
+        error="audit_unavailable", message=f"Could not record the {operation}."
     ), 500
 
 
@@ -179,17 +181,17 @@ def submit() -> Response | tuple[Response, int]:
     """Validate, score, and audit a submission before responding."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        return _reject_submission("invalid_json", "Send a valid JSON object.")
+        return _reject_request("invalid_json", "Send a valid JSON object.")
 
     creator_id = payload.get("creator_id")
     if not isinstance(creator_id, str) or not creator_id.strip():
-        return _reject_submission(
+        return _reject_request(
             "invalid_field", "'creator_id' must be a nonblank string."
         )
 
     text = payload.get("text")
     if not isinstance(text, str) or not text.strip():
-        return _reject_submission(
+        return _reject_request(
             "invalid_field",
             "'text' must be a nonblank string.",
             creator_id=creator_id,
@@ -198,13 +200,13 @@ def submit() -> Response | tuple[Response, int]:
     try:
         model_score = detector.model_signal(text)
     except detector.TextTooShortError:
-        return _reject_submission(
+        return _reject_request(
             "text_too_short",
             "Text needs at least three model tokens.",
             creator_id=creator_id,
         )
     except detector.DetectorUnavailable:
-        return _reject_submission(
+        return _reject_request(
             "detector_unavailable",
             "The detector is temporarily unavailable.",
             creator_id=creator_id,
@@ -239,33 +241,56 @@ def submit() -> Response | tuple[Response, int]:
 
 
 @app.post("/appeal")
-def appeal():
-    """
-    A writer says you got it wrong. ← TODO — Milestone 5
+def appeal() -> Response | tuple[Response, int]:
+    """Record a review request for an existing submission decision."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return _reject_request(
+            "invalid_json",
+            "Send a valid JSON object.",
+            operation="appeal",
+            route="/appeal",
+        )
 
-    Expects JSON:
-        {"content_id": "...", "reasoning": "..."}
+    content_id = payload.get("content_id")
+    if not isinstance(content_id, str) or not content_id.strip():
+        return _reject_request(
+            "invalid_field",
+            "'content_id' must be a nonblank string.",
+            operation="appeal",
+            route="/appeal",
+        )
 
-    Should:
-      1. Check the content_id actually exists — `audit.entries_for(id)` tells
-         you. A typo here fails silently and looks like a broken endpoint,
-         which is the single most common way this milestone eats an hour.
-      2. Record the appeal with `audit.log_appeal(...)`, which moves the item
-         to `under_review`.
-      3. Confirm to the writer. No automatic re-checking needed.
+    reasoning = payload.get("reasoning")
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return _reject_request(
+            "invalid_field",
+            "'reasoning' must be a nonblank string.",
+            operation="appeal",
+            route="/appeal",
+            content_id=content_id,
+        )
 
-    This is the smallest endpoint in the project and the one that matters most
-    to the person on the other end. It's the only thing standing between a
-    wrong accusation and nothing at all.
-    """
-    payload = request.get_json(silent=True) or {}
+    try:
+        for decision in audit.entries_for(content_id):
+            if decision.get("status") == "decided":
+                entry = audit.log_appeal(
+                    content_id, decision.get("creator_id"), reasoning
+                )
+                return jsonify(
+                    content_id=entry["content_id"], status=entry["status"]
+                )
+    except (OSError, TypeError, ValueError):
+        return _audit_unavailable("appeal")
 
-    # TODO: delete this and build the route.
-    return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+    return _reject_request(
+        "content_not_found",
+        "No decision was found for this content ID.",
+        status_code=404,
+        operation="appeal",
+        route="/appeal",
+        content_id=content_id,
+    )
 
 
 # ── Already works ─────────────────────────────────────────────────────────────
