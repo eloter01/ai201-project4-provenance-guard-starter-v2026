@@ -41,45 +41,60 @@ four calibration inputs. Add a plainly-written human paragraph to them and see
 for yourself where it lands.
 """
 
+from __future__ import annotations
+
 import math
+from threading import Lock
+from typing import TYPE_CHECKING
 
 import config
 
-_model = None
-_tokenizer = None
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
+
+_model: PreTrainedModel | None = None
+_tokenizer: PreTrainedTokenizerBase | None = None
+_load_lock = Lock()
 
 
 class DetectorUnavailable(RuntimeError):
     """The model couldn't be loaded — no download yet, or no disk."""
 
 
-def _load():
+class TextTooShortError(ValueError):
+    """The text has fewer than three model tokens."""
+
+
+def _load() -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
     """Load the model once and keep it. First call downloads ~550 MB."""
     global _model, _tokenizer
-    if _model is not None:
-        return _model, _tokenizer
+    with _load_lock:
+        if _model is not None and _tokenizer is not None:
+            return _model, _tokenizer
 
-    try:
-        import torch  # noqa: F401
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-    except ImportError as exc:
-        raise DetectorUnavailable(
-            f"transformers or torch isn't installed ({exc}).\n"
-            f"Run: pip install -r requirements.txt"
-        ) from exc
+        try:
+            import torch  # noqa: F401
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except (ImportError, OSError, RuntimeError) as exc:
+            raise DetectorUnavailable(
+                f"Couldn't import transformers or torch ({exc}).\n"
+                "Run: pip install -r requirements.txt"
+            ) from exc
 
-    try:
-        _tokenizer = AutoTokenizer.from_pretrained(config.DETECTOR_MODEL)
-        _model = AutoModelForCausalLM.from_pretrained(config.DETECTOR_MODEL)
-        _model.eval()
-    except Exception as exc:  # noqa: BLE001
-        raise DetectorUnavailable(
-            f"Couldn't load '{config.DETECTOR_MODEL}': {exc}\n"
-            f"The first run downloads about 550 MB — check your connection and "
-            f"that you have disk space free."
-        ) from exc
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(config.DETECTOR_MODEL)
+            model = AutoModelForCausalLM.from_pretrained(config.DETECTOR_MODEL)
+            model.eval()
+        except (ImportError, OSError, RuntimeError, ValueError) as exc:
+            raise DetectorUnavailable(
+                f"Couldn't load '{config.DETECTOR_MODEL}': {exc}\n"
+                "The first run downloads about 550 MB. "
+                "Check your connection and available disk space."
+            ) from exc
 
-    return _model, _tokenizer
+        _tokenizer = tokenizer
+        _model = model
+        return model, tokenizer
 
 
 def perplexity(text: str) -> float:
@@ -90,9 +105,8 @@ def perplexity(text: str) -> float:
     but that range shifts with topic and length, which is one reason the raw
     number isn't what you score on.
     """
-    import torch
-
     model, tokenizer = _load()
+    import torch
 
     encoded = tokenizer(
         text,
@@ -104,7 +118,7 @@ def perplexity(text: str) -> float:
 
     # Two tokens is not enough to be surprised by anything.
     if input_ids.shape[1] < 3:
-        raise ValueError("Text is too short to score — a few sentences at least.")
+        raise TextTooShortError("Text needs at least three model tokens.")
 
     with torch.no_grad():
         output = model(input_ids, labels=input_ids)

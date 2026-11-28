@@ -30,6 +30,7 @@ from flask import Flask, Response, jsonify, request
 
 import audit
 import config
+import detector
 
 app = Flask(__name__)
 
@@ -136,8 +137,6 @@ def ping():
 @app.get("/health")
 def health():
     """Is the service up, and has the model been downloaded yet?"""
-    import detector
-
     loaded = detector._model is not None
     return jsonify({
         "ok": True,
@@ -152,16 +151,30 @@ def health():
 
 
 def _reject_submission(
-    reason: str, message: str, *, creator_id: str = "unknown"
+    reason: str,
+    message: str,
+    *,
+    creator_id: str = "unknown",
+    status_code: int = 400,
 ) -> tuple[Response, int]:
-    audit.log_rejection(creator_id=creator_id, reason=reason)
-    return jsonify(error=reason, message=message), 400
+    try:
+        audit.log_rejection(creator_id=creator_id, reason=reason)
+    except (OSError, UnicodeEncodeError):
+        return _audit_unavailable()
+    return jsonify(error=reason, message=message), status_code
+
+
+def _audit_unavailable() -> tuple[Response, int]:
+    app.logger.exception("Could not write a submission audit entry.")
+    return jsonify(
+        error="audit_unavailable", message="Could not record the submission."
+    ), 500
 
 
 @app.post("/submit")
 # @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit() -> Response | tuple[Response, int]:
-    """Validate a submission before returning a sample decision."""
+    """Validate, score, and audit a submission before responding."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return _reject_submission("invalid_json", "Send a valid JSON object.")
@@ -180,12 +193,44 @@ def submit() -> Response | tuple[Response, int]:
             creator_id=creator_id,
         )
 
+    try:
+        model_score = detector.model_signal(text)
+    except detector.TextTooShortError:
+        return _reject_submission(
+            "text_too_short",
+            "Text needs at least three model tokens.",
+            creator_id=creator_id,
+        )
+    except detector.DetectorUnavailable:
+        return _reject_submission(
+            "detector_unavailable",
+            "The detector is temporarily unavailable.",
+            creator_id=creator_id,
+            status_code=503,
+        )
+
+    content_id = str(uuid.uuid4())
+    guess = "unsure"
+    confidence = 0.5
+    label = "We are unsure who wrote this text."
+    try:
+        audit.log_decision(
+            content_id=content_id,
+            creator_id=creator_id,
+            guess=guess,
+            model_score=model_score,
+            combined_score=confidence,
+            label=label,
+        )
+    except (OSError, UnicodeEncodeError):
+        return _audit_unavailable()
+
     return jsonify(
-        content_id="8e6f17b8-2042-4fa9-9dbf-48bccb4f11ba",
-        guess="unsure",
-        confidence=0.5,
-        label="We are unsure who wrote this text.",
-        model_score=0.0,
+        content_id=content_id,
+        guess=guess,
+        confidence=confidence,
+        label=label,
+        model_score=model_score,
         style_score=None,
     )
 
