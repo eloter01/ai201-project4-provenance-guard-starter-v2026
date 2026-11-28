@@ -213,9 +213,8 @@ def submit() -> Response | tuple[Response, int]:
 
     style_score = stylometry.style_signal(text)
     confidence = scoring.combine_signals(model_score, style_score)
+    guess, label = scoring.score_to_label(confidence)
     content_id = str(uuid.uuid4())
-    guess = "unsure"
-    label = "We are unsure who wrote this text."
     try:
         audit.log_decision(
             content_id=content_id,

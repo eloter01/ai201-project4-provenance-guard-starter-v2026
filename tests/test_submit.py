@@ -9,6 +9,7 @@ import config
 import detector
 import stylometry
 from app import app
+from scoring import score_to_label
 
 MISSING = object()
 MODEL_SCORE = 0.72
@@ -57,13 +58,39 @@ def test_submit_returns_both_signals_and_combined_confidence(
     assert response.is_json
     body = response.get_json()
     assert UUID(body.pop("content_id")).version == 4
+    guess, label = score_to_label(confidence)
     assert body == {
-        "guess": "unsure",
+        "guess": guess,
         "confidence": pytest.approx(confidence),
-        "label": "We are unsure who wrote this text.",
+        "label": label,
         "model_score": MODEL_SCORE,
         "style_score": style_score,
     }
+
+
+@pytest.mark.parametrize(
+    ("model_score", "style_score", "guess"),
+    [(0.40, 0.20, "human"), (0.90, 0.50, "unsure"), (0.70, 0.80, "ai")],
+)
+def test_submit_labels_from_combined_score(
+    client: FlaskClient,
+    stub_model: Mock,
+    stub_style: Mock,
+    model_score: float,
+    style_score: float,
+    guess: str,
+) -> None:
+    stub_model.return_value = model_score
+    stub_style.return_value = style_score
+    response = client.post(
+        "/submit",
+        json={"text": "The shop opens at eight.", "creator_id": "demo-writer"},
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["guess"] == guess
+    assert body["label"] == score_to_label(body["confidence"])[1]
 
 
 def test_ping_remains_available(client: FlaskClient) -> None:
@@ -193,6 +220,24 @@ def test_submit_audit_matches_response_scores(
     assert entry["style_score"] == body["style_score"] == 0.50
     assert entry["combined_score"] == body["confidence"]
     assert entry["label"] == body["label"]
+
+
+def test_submit_audit_matches_response_label(
+    client: FlaskClient, stub_style: Mock
+) -> None:
+    payload = {"text": "The shop opens at eight.", "creator_id": "demo-writer"}
+    first = client.post("/submit", json=payload)
+    stub_style.return_value = 0.50
+    second = client.post("/submit", json=payload)
+
+    assert first.status_code == second.status_code == 200
+    log = client.get("/log").get_json()
+    entries = {row["content_id"]: row for row in log["entries"]}
+    for response, guess in ((first, "ai"), (second, "unsure")):
+        body = response.get_json()
+        entry = entries[body["content_id"]]
+        assert entry["guess"] == body["guess"] == guess
+        assert entry["label"] == body["label"]
 
 
 def test_submit_assigns_distinct_content_ids(client: FlaskClient) -> None:
