@@ -151,10 +151,35 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 
+def _reject_submission(
+    reason: str, message: str, *, creator_id: str = "unknown"
+) -> tuple[Response, int]:
+    audit.log_rejection(creator_id=creator_id, reason=reason)
+    return jsonify(error=reason, message=message), 400
+
+
 @app.post("/submit")
 # @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
-def submit() -> Response:
-    """Return a sample decision so the route can be checked independently."""
+def submit() -> Response | tuple[Response, int]:
+    """Validate a submission before returning a sample decision."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return _reject_submission("invalid_json", "Send a valid JSON object.")
+
+    creator_id = payload.get("creator_id")
+    if not isinstance(creator_id, str) or not creator_id.strip():
+        return _reject_submission(
+            "invalid_field", "'creator_id' must be a nonblank string."
+        )
+
+    text = payload.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return _reject_submission(
+            "invalid_field",
+            "'text' must be a nonblank string.",
+            creator_id=creator_id,
+        )
+
     return jsonify(
         content_id="8e6f17b8-2042-4fa9-9dbf-48bccb4f11ba",
         guess="unsure",
