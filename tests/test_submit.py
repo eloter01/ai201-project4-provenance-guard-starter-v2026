@@ -7,6 +7,7 @@ from flask.testing import FlaskClient
 
 import config
 import detector
+import stylometry
 from app import app
 
 MISSING = object()
@@ -27,7 +28,23 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FlaskClient:
     return app.test_client()
 
 
-def test_submit_returns_json_response(client: FlaskClient) -> None:
+@pytest.fixture
+def stub_style(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    style_signal = Mock(return_value=0.88)
+    monkeypatch.setattr(stylometry, "style_signal", style_signal)
+    return style_signal
+
+
+@pytest.mark.parametrize(
+    ("style_score", "confidence"), [(0.88, 0.80), (0.60, 0.50)]
+)
+def test_submit_returns_both_signals_and_combined_confidence(
+    client: FlaskClient,
+    stub_style: Mock,
+    style_score: float,
+    confidence: float,
+) -> None:
+    stub_style.return_value = style_score
     response = client.post(
         "/submit",
         json={
@@ -42,10 +59,10 @@ def test_submit_returns_json_response(client: FlaskClient) -> None:
     assert UUID(body.pop("content_id")).version == 4
     assert body == {
         "guess": "unsure",
-        "confidence": 0.5,
+        "confidence": pytest.approx(confidence),
         "label": "We are unsure who wrote this text.",
         "model_score": MODEL_SCORE,
-        "style_score": None,
+        "style_score": style_score,
     }
 
 
@@ -130,16 +147,19 @@ def test_submit_audits_rejections(
     assert entry["reason"] == reason
 
 
-def test_submit_accepts_text_over_400_characters(client: FlaskClient) -> None:
-    text = "The first customer came in for bread. " * 12
+def test_submit_passes_full_long_text_to_stylometry(
+    client: FlaskClient, stub_style: Mock
+) -> None:
+    text = "  " + "The shop opens at eight. " * 100 + "Last line. "
     response = client.post(
         "/submit", json={"text": text, "creator_id": "demo-writer"}
     )
 
     assert response.status_code == 200
+    stub_style.assert_called_once_with(text)
 
 
-def test_submit_returns_and_audits_model_score(
+def test_submit_audit_matches_response_scores(
     client: FlaskClient, stub_model: Mock
 ) -> None:
     text = "The first customer came in for bread."
@@ -150,15 +170,27 @@ def test_submit_returns_and_audits_model_score(
     assert response.status_code == 200
     stub_model.assert_called_once_with(text)
     body = response.get_json()
+
+    other = client.post(
+        "/submit",
+        json={
+            "text": "We walk home. They stay here.",
+            "creator_id": "another-writer",
+        },
+    )
+    assert other.status_code == 200
+
     log = client.get("/log").get_json()
-    assert log["count"] == 1
-    entry = log["entries"][0]
+    assert log["count"] == 2
+    content_id = body["content_id"]
+    (entry,) = (
+        row for row in log["entries"] if row["content_id"] == content_id
+    )
     assert entry["creator_id"] == "demo-writer"
     assert entry["status"] == "decided"
-    assert entry["content_id"] == body["content_id"]
     assert entry["guess"] == body["guess"]
     assert entry["model_score"] == body["model_score"] == MODEL_SCORE
-    assert entry["style_score"] is None
+    assert entry["style_score"] == body["style_score"] == 0.50
     assert entry["combined_score"] == body["confidence"]
     assert entry["label"] == body["label"]
 

@@ -31,6 +31,8 @@ from flask import Flask, Response, jsonify, request
 import audit
 import config
 import detector
+import scoring
+import stylometry
 
 app = Flask(__name__)
 
@@ -209,9 +211,10 @@ def submit() -> Response | tuple[Response, int]:
             status_code=503,
         )
 
+    style_score = stylometry.style_signal(text)
+    confidence = scoring.combine_signals(model_score, style_score)
     content_id = str(uuid.uuid4())
     guess = "unsure"
-    confidence = 0.5
     label = "We are unsure who wrote this text."
     try:
         audit.log_decision(
@@ -219,6 +222,7 @@ def submit() -> Response | tuple[Response, int]:
             creator_id=creator_id,
             guess=guess,
             model_score=model_score,
+            style_score=style_score,
             combined_score=confidence,
             label=label,
         )
@@ -231,7 +235,7 @@ def submit() -> Response | tuple[Response, int]:
         confidence=confidence,
         label=label,
         model_score=model_score,
-        style_score=None,
+        style_score=style_score,
     )
 
 
