@@ -47,6 +47,15 @@ DETECTOR_MODEL = os.getenv("AI201_DETECTOR_MODEL", "gpt2")
 DETECTOR_MAX_TOKENS = 400
 
 
+# Standalone readings put sentence spread at 0.32 for the README shop note,
+# 0.39 for the default CLI sample, and 1.34 for a varied-length sample. Their
+# rolling vocabulary ratios were 0.86, 0.92, and 1.00, respectively. The
+# initial ranges map the lower bound to 1 (AI) and the upper bound to 0.
+STYLE_SENTENCE_SPREAD_RANGE = (0.25, 1.0)
+STYLE_VOCABULARY_RATIO_RANGE = (0.80, 1.0)
+STYLE_VOCABULARY_WINDOW = 20
+
+
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.
 #
@@ -73,17 +82,6 @@ WEIGHT_STYLE_SIGNAL = 0.5
 
 HUMAN_THRESHOLD = 0.35
 AI_THRESHOLD = 0.65
-
-# ⚠️ One thing that catches people out in Milestone 5. A weighted average can
-# only land between its two inputs — so while `style_signal` is still the stub
-# returning 0.5, the combined score can never leave 0.25–0.75 no matter what
-# the model signal says, and the human label needs a model score below 0.20 to
-# be reachable at all.
-#
-# If a label you can't reach is the problem, the fix is upstream of the
-# thresholds: a style signal that actually varies. `scoring.label_ranges()`
-# prints the bands; the reachable range is a different question.
-
 
 # ─── Rate limiting (UNIT 8) ──────────────────────────────────────────────────
 # Off in unit 7. You turn it on and choose the numbers in unit 8, Milestone 1.
