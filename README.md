@@ -47,8 +47,8 @@ See the [API contract](docs/API_CONTRACT.md) for request and response fields.
    the first 400 model tokens and returns `model_score`. It requires at least
    three tokens to score the text.
 3. **Score writing style.** `stylometry.py` takes the full submitted text and
-   returns `style_score` based on sentence length spread, word variety, and
-   punctuation density.
+   measures sentence length spread and vocabulary variety to produce
+   `style_score`.
 4. **Combine the scores.** `scoring.py::combine_signals` takes both signal
    scores and produces one score from 0 to 1. Higher values point toward AI.
 5. **Choose a label.** `scoring.py::score_to_label` compares the combined
@@ -88,37 +88,66 @@ the text, while who wrote it and how they wrote it are outside its view.
 
 **What it measures**
 
-The planned style signal measures how much sentence lengths vary, what
-share of words are unique, and how often punctuation appears.
+Sentence length spread is the sample standard deviation of sentence word
+counts divided by their mean. It needs at least two sentences with words.
+Vocabulary variety averages the share of unique words across every rolling
+20-word window. Both measures use the full passage.
+
+The ranges in `config.py` map sentence spread from 0.25 to 1.00 and
+vocabulary variety from 0.80 to 1.00 onto scores from 1 to 0. Values
+outside each range are clipped to the nearest endpoint. The style signal
+averages the available scores and returns 0.50 when neither is available.
 
 **Why it might differ**
 
 Generated prose can use similarly sized sentences and repeat familiar words.
 A person might mix short instructions with longer explanations and use
-punctuation differently as the rhythm changes.
+a wider vocabulary.
 
 **What it misses**
 
 The style signal has no access to meaning. Splitting a long sentence into
-two can change the measured sentence lengths and punctuation while
-preserving what the text says. A one-sentence submission provides no
-evidence about how length varies between sentences.
+two can change the measured sentence lengths while preserving what the
+text says. A one-sentence submission provides no evidence about how length
+varies between sentences.
+
+### CLI comparison
+
+Each passage went into `python detector.py` and `python stylometry.py` as
+the same single argument. The detector used the local `gpt2` model. The
+last column shows what the planned combining rule would return.
+
+| Passage | Model | Style | 50/50 average | Expected combined score |
+| --- | ---: | ---: | ---: | ---: |
+| Clearly AI, generated feedback paragraph | 0.9143 | 1.0000 | 0.957 | 0.957 |
+| Clearly human, opening of *Moby-Dick* | 0.4366 | 0.2273 | 0.332 | 0.332 |
+| Borderline, shop note from the example below | 0.6449 | 0.7953 | 0.720 | 0.500 |
+
+The clearly AI passage was generated for this check. Join the lines with
+single spaces to reproduce the CLI input.
+
+> The system collects user feedback to improve the quality of the service.
+> The system reviews user feedback to identify common problems with the service.
+> The system uses user feedback to guide future improvements to the service.
+> The system tracks user feedback to measure the impact of each improvement.
+
+The human passage is the first paragraph of Chapter 1, from "Call me
+Ishmael." through "regulating the circulation." [Project Gutenberg Australia]
+
+[Project Gutenberg Australia]: https://www.gutenberg.net.au/ebooks/z00015.html
 
 ### The combining rule
 
-<!-- Write the rule in words, then give the numbers. What happens when the two
-     signals disagree? -->
+Give each signal 50% weight. If the average reaches the AI cutoff and
+either signal is below it, return the midpoint of the unsure range.
+Otherwise, keep the average. The cutoffs in `config.py` are 0.35 and
+0.65, so the midpoint is 0.50. The rule will live in
+`scoring.py::combine_signals`.
 
-**The rule:**
-
-**The numbers:**
-
-**Where it lives:** `scoring.py::combine_signals`
-
-<!-- ⚠️ The grader checks your code against that line. If your rule lives
-     somewhere else, say where. -->
-
-**A case where my two signals split, and what my rule does with it:**
+The shop note's 0.720 average clears the AI cutoff while its model score
+falls below 0.65. The rule returns 0.50 for that pair. A model score of
+0.90 and a style score of 0.50 also average to 0.70 and produce 0.50
+under the rule. When both scores are exactly 0.65, the rule keeps 0.65.
 
 ### A false positive and appeal
 
