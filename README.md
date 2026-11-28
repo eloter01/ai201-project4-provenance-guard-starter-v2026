@@ -36,36 +36,72 @@
 
 ## What This Does
 
-<!-- The path a submission takes, from arriving to the label a reader sees.
-     Six or seven steps — this is the trace you wrote in Milestone 1. -->
+Provenance Guard is a local service designed to give a writing site a
+reader-facing label for a submission. A writer can appeal the decision.
 
-
+1. **Validate the request.** The `POST /submit` handler in `app.py` checks
+   that the JSON body is an object with nonblank `text` and `creator_id`
+   strings. It passes the validated text to the two signals.
+2. **Score predictability.** The local detector in `detector.py` takes up to
+   the first 400 model tokens and returns `model_score`. It requires at least
+   three tokens to score the text.
+3. **Score writing style.** `stylometry.py` takes the full submitted text and
+   returns `style_score` based on sentence length spread, word variety, and
+   punctuation density.
+4. **Combine the scores.** `scoring.py::combine_signals` takes both signal
+   scores and produces one score from 0 to 1. Higher values point toward AI.
+5. **Choose a label.** `scoring.py::score_to_label` compares the combined
+   score with the configured cutoffs and returns a `human`, `unsure`, or
+   `ai` guess and the corresponding plain-English label.
+6. **Record the decision.** The handler assigns a `content_id`. `audit.py`
+   appends a `decided` entry to `logs/audit.jsonl` with the timestamp, both
+   IDs, both signal scores, the combined score, the guess, and the label.
+7. **Return the response.** The handler returns JSON with `content_id`,
+   `guess`, `confidence` (the combined score), `label`, `model_score`, and
+   `style_score`. The writing site displays the `label` to the reader.
 
 ---
 
 ## Signals and Scoring
 
-<!-- For each signal: what property it measures, why that might differ between
-     human and AI writing, and WHAT IT CAN'T SEE.
-
-     The blind spot is not optional. If you can't name it you don't understand
-     the signal yet — and unit 8's attack set is built out of blind spots. -->
-
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures**
 
-**Why that might differ between human and AI writing:**
+The local language model measures how predictable each token is given the
+tokens before it. This measure is called perplexity. Lower perplexity means
+the text is easier for the model to predict and earns a higher AI score.
 
-**What it can't see:**
+**Why it might differ**
+
+AI-generated prose can favor likely word choices and familiar phrases.
+People sometimes use words or details that the model finds less predictable.
+
+**What it misses**
+
+A person writing plain instructions can use common words and familiar
+phrases throughout and receive a high AI score. The model sees patterns in
+the text, while who wrote it and how they wrote it are outside its view.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures**
 
-**Why that might differ between human and AI writing:**
+The planned style signal measures how much sentence lengths vary, what
+share of words are unique, and how often punctuation appears.
 
-**What it can't see:**
+**Why it might differ**
+
+Generated prose can use similarly sized sentences and repeat familiar words.
+A person might mix short instructions with longer explanations and use
+punctuation differently as the rhythm changes.
+
+**What it misses**
+
+The style signal has no access to meaning. Splitting a long sentence into
+two can change the measured sentence lengths and punctuation while
+preserving what the text says. A one-sentence submission provides no
+evidence about how length varies between sentences.
 
 ### The combining rule
 
