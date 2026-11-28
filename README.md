@@ -115,7 +115,7 @@ varies between sentences.
 
 Each passage went into `python detector.py` and `python stylometry.py` as
 the same single argument. The detector used the local `gpt2` model. The
-last column shows what the planned combining rule would return.
+last column shows the combined score calculated from those readings.
 
 | Passage | Model | Style | 50/50 average | Expected combined score |
 | --- | ---: | ---: | ---: | ---: |
@@ -141,7 +141,7 @@ Ishmael." through "regulating the circulation." [Project Gutenberg Australia]
 Give each signal 50% weight. If the average reaches the AI cutoff and
 either signal is below it, return the midpoint of the unsure range.
 Otherwise, keep the average. The cutoffs in `config.py` are 0.35 and
-0.65, so the midpoint is 0.50. The rule will live in
+0.65, so the midpoint is 0.50. The rule lives in
 `scoring.py::combine_signals`.
 
 The shop note's 0.720 average clears the AI cutoff while its model score

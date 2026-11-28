@@ -57,12 +57,7 @@ STYLE_VOCABULARY_WINDOW = 20
 
 
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
-# How much each signal counts toward the combined score.
-#
-# ⚠️ These are placeholders. Milestone 4 asks you to write your combining rule
-# down BEFORE you code it, and to put the numbers in your README. Whatever you
-# decide, it goes here.
-
+# Each signal has equal weight in the average used by combine_signals.
 WEIGHT_MODEL_SIGNAL = 0.5
 WEIGHT_STYLE_SIGNAL = 0.5
 
@@ -73,7 +68,7 @@ WEIGHT_STYLE_SIGNAL = 0.5
 #
 #   score < HUMAN_THRESHOLD          -> high-confidence human
 #   between the two                  -> unsure
-#   score > AI_THRESHOLD             -> high-confidence AI
+#   score >= AI_THRESHOLD            -> high-confidence AI
 #
 # ⚠️ This is where your false-positive decision from Milestone 1 actually gets
 # made. Widening the unsure band means fewer wrong accusations and more AI text
