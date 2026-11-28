@@ -38,6 +38,7 @@
 
 Provenance Guard is a local service designed to give a writing site a
 reader-facing label for a submission. A writer can appeal the decision.
+See the [API contract](docs/API_CONTRACT.md) for request and response fields.
 
 1. **Validate the request.** The `POST /submit` handler in `app.py` checks
    that the JSON body is an object with nonblank `text` and `creator_id`
