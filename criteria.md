@@ -42,15 +42,20 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. Limit false positives to one in ten
 
-<!-- Your criterion. It must name a number. -->
+Before scoring, choose ten distinct passages you wrote yourself, including
+examples of plain, everyday prose. Submit the same ten passages to
+`POST /submit` in each of three trials.
 
+Each trial passes if all ten requests return HTTP `200` with a `guess` of
+`human`, `unsure`, or `ai`, and at most one guess is `ai`. A request error or
+a missing or invalid `guess` fails the trial. The criterion passes only if
+all three trials pass.
 
-
-**Why this target:**
-
-
+**Why this target?** A false AI accusation can damage a writer's credibility
+and leave them defending their own work. That costs more than missing some
+AI-generated writing.
 
 ---
 
